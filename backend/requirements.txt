@@ -1,0 +1,56 @@
+# ─── Web Framework ───────────────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.18
+
+# ─── Authentication ───────────────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.0
+
+# ─── Database ─────────────────────────────────────────────────────────────────
+sqlalchemy==2.0.36
+alembic==1.14.0
+aiosqlite==0.20.0
+# psycopg2-binary==2.9.9   # Uncomment for PostgreSQL production
+
+# ─── Pydantic ─────────────────────────────────────────────────────────────────
+pydantic==2.10.2
+pydantic-settings==2.6.1
+
+# ─── ML Core ──────────────────────────────────────────────────────────────────
+torch==2.4.1
+torchvision==0.19.1
+timm==1.0.11
+numpy==1.26.4
+scipy==1.14.1
+scikit-learn==1.5.2
+
+# ─── Computer Vision ──────────────────────────────────────────────────────────
+opencv-python==4.10.0.84
+Pillow==11.0.0
+albumentations==1.4.21
+facenet-pytorch==2.6.0       # MTCNN face detection
+
+# ─── Graph Neural Networks ───────────────────────────────────────────────────
+# torch-geometric and its dependencies – install separately with correct CUDA index
+# pip install torch-geometric torch-scatter torch-sparse torch-cluster
+
+# ─── Visualization ────────────────────────────────────────────────────────────
+matplotlib==3.9.3
+
+# ─── Rate Limiting ────────────────────────────────────────────────────────────
+slowapi==0.1.9
+
+# ─── Background Tasks ─────────────────────────────────────────────────────────
+celery==5.4.0         # optional; FastAPI BackgroundTasks used by default
+
+# ─── Testing ──────────────────────────────────────────────────────────────────
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.0
+
+# ─── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
+aiofiles==24.1.0
+python-magic-bin==0.4.14     # Windows file-type validation
