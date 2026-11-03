@@ -1,0 +1,60 @@
+version: "3.9"
+
+services:
+  # ── Backend API ─────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deepfake-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./deepfake.db
+      - SECRET_KEY=${SECRET_KEY:-change_me_to_a_random_64_char_hex_string}
+      - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL:-admin@deepfake.ai}
+      - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD:-Admin@123}
+      - CORS_ORIGINS=http://localhost:80,http://localhost:5173,http://localhost:3000
+      - UPLOAD_DIR=/app/uploads
+      - CHECKPOINTS_DIR=/app/checkpoints
+      - DEVICE=auto
+    volumes:
+      - uploads_data:/app/uploads
+      - checkpoints_data:/app/checkpoints
+      - reports_data:/app/reports
+      - ./datasets:/app/datasets:ro
+    restart: unless-stopped
+
+  # ── Frontend ────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: deepfake-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # ── PostgreSQL (production alternative) ─────────────────────────────
+  # Uncomment to use PostgreSQL instead of SQLite:
+  #
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: deepfake-postgres
+  #   environment:
+  #     POSTGRES_DB: deepfake
+  #     POSTGRES_USER: deepfake_user
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-deepfake_secret}
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+volumes:
+  uploads_data:
+  checkpoints_data:
+  reports_data:
+  # postgres_data:
