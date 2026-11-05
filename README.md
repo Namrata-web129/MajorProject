@@ -118,8 +118,8 @@ The ViT backbone is pretrained using student-teacher self-distillation:
 | Layer          | Technologies |
 |----------------|-------------|
 | Frontend       | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, Recharts, Lucide React, Axios |
-| Backend        | Python 3.11+, FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2.0 |
-| ML/AI          | PyTorch, TorchVision, timm, PyTorch Geometric, OpenCV, MTCNN, Scikit-learn |
+| Backend        | Python 3.11–3.12, FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2.0 |
+| ML/AI          | PyTorch, TorchVision, timm, PyTorch Geometric, OpenCV, Scikit-learn |
 | Database       | SQLite (dev) / PostgreSQL (prod) |
 | Infrastructure | Docker, Docker Compose, FFmpeg, JWT, Pytest |
 
@@ -159,7 +159,7 @@ datasets/
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.11 (recommended) or 3.12. Python 3.13 is not supported by the pinned PyTorch 2.4.1 dependency.
 - Node.js 18+
 - Git
 - (Optional) CUDA-compatible GPU for training
@@ -167,18 +167,19 @@ datasets/
 ### Backend Setup
 
 ```bash
-cd backend
+# From the project root, create a Python 3.11 virtual environment
+py -3.11 -m venv .venv311
 
-# Create virtual environment
-python -m venv venv
+# Windows PowerShell or Git Bash: use this interpreter explicitly
+.\.venv311\Scripts\python.exe --version
+.\.venv311\Scripts\python.exe -m pip install --upgrade pip
+.\.venv311\Scripts\python.exe -m pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cpu
+.\.venv311\Scripts\python.exe -m pip install --index-url https://pypi.org/simple -r .\backend\requirements.txt
 
-# Activate (Windows)
-venv\Scripts\activate
-# Activate (Linux/Mac)
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
+# Linux/Mac:
+# python3.11 -m venv .venv311
+# source .venv311/bin/activate
+# python -m pip install --index-url https://pypi.org/simple -r backend/requirements.txt
 ```
 
 ### Frontend Setup
@@ -298,7 +299,9 @@ asyncio.run(trainer.train())
 
 ## Model Inference
 
-Once trained, the system automatically loads the best checkpoint for inference.
+When a project Graph Transformer classifier checkpoint exists, the system loads it first. Otherwise, image and video detection use the pinned community pretrained ViT model [Deep-Fake-Detector-v2](https://huggingface.co/prithivMLmods/Deep-Fake-Detector-v2-Model) (Apache-2.0) as a fallback. On first analysis, the backend downloads the model from Hugging Face; an internet connection is required once, and the model is cached locally.
+
+The fallback is an experimental image classifier, not this project's Graph Transformer. It has not been independently validated here, its scores are uncalibrated, and its own model card warns that it may not generalize to other media. Videos are analyzed by sampling face frames and averaging their scores; this is not temporal video detection. Results identify which detector ran and display this limitation. Do not treat a prediction as proof of authenticity.
 
 ### Single Image
 
@@ -323,10 +326,13 @@ curl -X POST http://localhost:8000/api/detection/video \
 ## Backend Startup
 
 ```bash
-cd backend
-# Activate venv
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# From the project root on Windows:
+.\.venv311\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+# Linux/Mac (after activating the virtual environment):
+# python -m uvicorn app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000
 ```
+
+On Windows, run without `--reload` and restart the backend after code changes so the worker uses `.venv311`.
 
 The API docs are available at: `http://localhost:8000/api/docs`
 
@@ -448,7 +454,7 @@ python -m pytest ../tests/test_ml_pipeline.py::TestFullModel -v
 
 ## Known Limitations
 
-1. **No pretrained weights included** — You must train the model on your own dataset. The system clearly communicates when no checkpoint is available.
+1. **Graph Transformer weights** — No trained Graph Transformer checkpoint is included; the model must be trained on an authorized labeled dataset. Until then, detection uses the documented community pretrained fallback.
 
 2. **Dataset access** — FaceForensics++, Celeb-DF, and other datasets require registration and are not automatically downloadable.
 
@@ -456,7 +462,7 @@ python -m pytest ../tests/test_ml_pipeline.py::TestFullModel -v
 
 4. **Video analysis** — Frame-level aggregation (mean fake probability) is an extension of the paper's frame-level architecture. The paper does not implement temporal modeling.
 
-5. **Face detection fallback** — If MTCNN (facenet-pytorch) is not installed, falls back to OpenCV Haar cascades with lower accuracy.
+5. **Face detection** — OpenCV Haar cascades are used by default. `facenet-pytorch` is not included because its current PyTorch constraint conflicts with the pinned PyTorch 2.4.1; Haar detection is less accurate, especially for profiles and low-quality faces.
 
 6. **Evaluation metrics** — All displayed metrics come from actual model inference on test data. Never from the research paper's published results.
 
@@ -488,7 +494,7 @@ deepfake-detection/
 │
 ├── ml/                # Machine Learning
 │   ├── preprocessing/    # Transforms, patch extraction, video
-│   ├── face_detection/   # MTCNN + Haar fallback
+│   ├── face_detection/   # OpenCV Haar cascades (MTCNN optional)
 │   ├── feature_extractor/# ViT architecture
 │   ├── self_supervised/  # Student-teacher, MIM, EMA, losses
 │   ├── graph/            # KNN graph construction

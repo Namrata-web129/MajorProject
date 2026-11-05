@@ -11,6 +11,7 @@ from typing import List
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from sqlalchemy import desc, select
 
+from app.core.config import get_settings
 from app.core.dependencies import AdminUser, DBSession
 from app.database.models import ModelVersion, TrainingJob, TrainingMetric
 from app.schemas.schemas import (
@@ -22,6 +23,7 @@ from app.schemas.schemas import (
 from app.services.training_service import start_pretrain_job, start_classifier_job, stop_training_job
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 router = APIRouter(prefix="/api/training", tags=["Training"])
 
@@ -42,11 +44,14 @@ async def start_pretrain(
     db.add(model)
     await db.flush()
 
+    training_config = config.model_dump()
+    training_config["checkpoint_dir"] = settings.CHECKPOINTS_DIR
+
     job = TrainingJob(
         model_version_id=model.id,
         job_type="pretrain",
         status="queued",
-        config=json.dumps(config.model_dump()),
+        config=json.dumps(training_config),
         dataset_path=config.dataset_path,
         total_epochs=config.epochs,
     )
@@ -60,7 +65,7 @@ async def start_pretrain(
         start_pretrain_job,
         job_id=job_id,
         model_version_id=model_id,
-        config=config.model_dump(),
+        config=training_config,
     )
 
     return TrainingJobResponse(
@@ -85,11 +90,14 @@ async def start_classifier(
     db.add(model)
     await db.flush()
 
+    training_config = config.model_dump()
+    training_config["checkpoint_dir"] = settings.CHECKPOINTS_DIR
+
     job = TrainingJob(
         model_version_id=model.id,
         job_type="classifier",
         status="queued",
-        config=json.dumps(config.model_dump()),
+        config=json.dumps(training_config),
         dataset_path=config.dataset_path,
         total_epochs=config.epochs,
     )
@@ -103,7 +111,7 @@ async def start_classifier(
         start_classifier_job,
         job_id=job_id,
         model_version_id=model_id,
-        config=config.model_dump(),
+        config=training_config,
     )
 
     return TrainingJobResponse(

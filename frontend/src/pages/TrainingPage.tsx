@@ -5,7 +5,7 @@ import type { TrainingStatus, ModelStatus } from '@/types';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import {
   Activity, Play, StopCircle, Loader2, AlertTriangle,
-  CheckCircle, XCircle, Cpu, Lock
+  Cpu, Lock
 } from 'lucide-react';
 
 const defaultPretrainConfig = {

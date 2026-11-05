@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -29,8 +29,33 @@ from ml.preprocessing.transforms import (
 )
 from ml.preprocessing.video_processor import VideoProcessor
 from ml.inference.model import DeepfakeDetectionModel
+from ml.inference.pretrained import (
+    DETECTOR_NAME,
+    MODEL_ID,
+    MODEL_NOTICE,
+    PretrainedDeepfakeDetector,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_classifier_checkpoint(checkpoint_dir: Path) -> Optional[Path]:
+    """Prefer the best trained checkpoint, with deterministic fallbacks."""
+    for filename in ("classifier_best.pt", "classifier_final.pt"):
+        checkpoint = checkpoint_dir / filename
+        if checkpoint.is_file():
+            return checkpoint
+
+    candidates = sorted(
+        checkpoint_dir.glob("classifier_*.pt"),
+        key=lambda path: path.stat().st_mtime_ns,
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+class ModelNotTrainedError(RuntimeError):
+    """Raised when inference is requested without a trained classifier."""
 
 
 class InferencePipeline:
@@ -62,6 +87,7 @@ class InferencePipeline:
         device: str = "auto",
         video_sample_rate: int = 1,
         video_max_frames: int = 50,
+        checkpoint_dir: str = "./checkpoints",
     ) -> None:
         # Device
         if device == "auto":
@@ -71,7 +97,12 @@ class InferencePipeline:
         logger.info("Inference pipeline using device: %s", self.device)
 
         self.image_size = image_size
+        self.patch_size = patch_size
         self.confidence_threshold = confidence_threshold
+        self.checkpoint_dir = Path(checkpoint_dir)
+        self.pretrained_model_id = MODEL_ID
+        self._pretrained_detector: Optional[PretrainedDeepfakeDetector] = None
+        self._pretrained_detector_lock = threading.Lock()
 
         # Face detector
         self.face_detector = FaceDetector(device=self.device)
@@ -108,73 +139,89 @@ class InferencePipeline:
     ) -> None:
         """Load model checkpoints if available."""
         # Try loading full classifier checkpoint first
-        if checkpoint_path and Path(checkpoint_path).exists():
-            try:
-                state = torch.load(checkpoint_path, map_location="cpu")
-                if "model_state_dict" in state:
-                    self.model.load_state_dict(state["model_state_dict"])
-                else:
-                    self.model.load_state_dict(state)
-                self._model_loaded = True
-                logger.info("Loaded classifier checkpoint: %s", checkpoint_path)
-                return
-            except Exception as e:
-                logger.error("Failed to load classifier checkpoint: %s", e)
+        if checkpoint_path:
+            path = Path(checkpoint_path)
+            if not path.is_file():
+                raise FileNotFoundError(f"Classifier checkpoint not found: {path}")
+            self._load_classifier_checkpoint(path)
+            return
 
         # Try loading pretrained ViT
-        if pretrain_checkpoint_path and Path(pretrain_checkpoint_path).exists():
-            try:
-                self.model.load_pretrained_vit(pretrain_checkpoint_path)
-                logger.info("Loaded pretrained ViT (classifier not yet trained)")
-            except Exception as e:
-                logger.error("Failed to load ViT checkpoint: %s", e)
+        if pretrain_checkpoint_path:
+            self.model.load_pretrained_vit(pretrain_checkpoint_path)
+            logger.info("Loaded pretrained ViT; classifier training is still required")
+            return
 
         # Auto-discover checkpoints
-        checkpoints_dir = Path("./checkpoints")
+        checkpoints_dir = self.checkpoint_dir
         if checkpoints_dir.exists():
-            # Look for classifier checkpoint
-            classifier_ckpts = sorted(
-                checkpoints_dir.glob("classifier_*.pt"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-            if classifier_ckpts:
-                try:
-                    state = torch.load(str(classifier_ckpts[0]), map_location="cpu")
-                    if "model_state_dict" in state:
-                        self.model.load_state_dict(state["model_state_dict"])
-                    else:
-                        self.model.load_state_dict(state)
-                    self._model_loaded = True
-                    logger.info("Auto-loaded classifier: %s", classifier_ckpts[0])
-                    return
-                except Exception as e:
-                    logger.warning("Failed to auto-load: %s", e)
-
-            # Look for pretrain checkpoint
-            pretrain_ckpts = sorted(
-                checkpoints_dir.glob("pretrain_*.pt"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-            if pretrain_ckpts:
-                try:
-                    self.model.load_pretrained_vit(str(pretrain_ckpts[0]))
-                    logger.info("Auto-loaded pretrained ViT: %s", pretrain_ckpts[0])
-                except Exception as e:
-                    logger.warning("Failed to auto-load ViT: %s", e)
+            classifier_checkpoint = _resolve_classifier_checkpoint(checkpoints_dir)
+            if classifier_checkpoint:
+                self._load_classifier_checkpoint(classifier_checkpoint)
 
         if not self._model_loaded:
             logger.warning(
-                "No trained classifier checkpoint found. "
-                "The model will run with randomly initialised weights. "
-                "Please train the model before relying on predictions."
+                "No trained classifier checkpoint found in %s",
+                checkpoints_dir,
             )
+
+    def _load_classifier_checkpoint(self, checkpoint_path: Path) -> None:
+        """Load a complete classifier checkpoint or raise an explicit error."""
+        state = torch.load(str(checkpoint_path), map_location="cpu")
+        model_state = state.get("model_state_dict", state) if isinstance(state, dict) else state
+        if not isinstance(model_state, dict):
+            raise TypeError(f"Invalid classifier checkpoint format: {checkpoint_path}")
+        self.model.load_state_dict(model_state)
+        self._model_loaded = True
+        logger.info("Loaded classifier checkpoint: %s", checkpoint_path)
+
+    def _require_trained_model(self) -> None:
+        if self._model_loaded:
+            return
+        if getattr(self, "pretrained_model_id", None):
+            self._get_pretrained_detector()
+            return
+        raise ModelNotTrainedError(
+            "No trained Graph Transformer classifier checkpoint is available. "
+            "Ask an administrator to complete classifier training before running detection."
+        )
+
+    def _get_pretrained_detector(self) -> PretrainedDeepfakeDetector:
+        if self._pretrained_detector is None:
+            with self._pretrained_detector_lock:
+                if self._pretrained_detector is None:
+                    logger.info(
+                        "Loading pretrained image detector %s at pinned revision",
+                        self.pretrained_model_id,
+                    )
+                    self._pretrained_detector = (
+                        PretrainedDeepfakeDetector.from_pretrained(self.device)
+                    )
+        return self._pretrained_detector
+
+    @property
+    def detector_name(self) -> str:
+        if self._model_loaded:
+            return "Project Graph Transformer"
+        if getattr(self, "_pretrained_detector", None) is not None:
+            return DETECTOR_NAME
+        return "Project Graph Transformer"
+
+    @property
+    def detector_notice(self) -> Optional[str]:
+        return (
+            MODEL_NOTICE
+            if getattr(self, "_pretrained_detector", None) is not None
+            else None
+        )
 
     @property
     def is_model_trained(self) -> bool:
-        """Check whether a trained checkpoint was loaded."""
-        return self._model_loaded
+        """Check whether a trained classifier is available for inference."""
+        return (
+            self._model_loaded
+            or getattr(self, "_pretrained_detector", None) is not None
+        )
 
     async def analyze_image(self, image_path: str) -> Dict[str, Any]:
         """
@@ -188,6 +235,7 @@ class InferencePipeline:
 
     def _analyze_image_sync(self, image_path: str) -> Dict[str, Any]:
         """Synchronous image analysis."""
+        self._require_trained_model()
         start = time.time()
 
         # 1. Load image
@@ -220,7 +268,7 @@ class InferencePipeline:
             face_crops_paths.append(crop_path)
 
             # Generate heatmap for primary face
-            if i == 0:
+            if i == 0 and self._model_loaded:
                 try:
                     heatmap_path = self._generate_heatmap(
                         face.face_image, result, image_path
@@ -246,7 +294,9 @@ class InferencePipeline:
             "graph_data_path": graph_data_path,
             "patch_relevance": patch_relevance,
             "processing_time_ms": elapsed_ms,
-            "model_trained": self._model_loaded,
+            "model_trained": self.is_model_trained,
+            "detector_name": self.detector_name,
+            "detector_notice": self.detector_notice,
         }
 
     async def analyze_video(self, video_path: str) -> Dict[str, Any]:
@@ -256,6 +306,7 @@ class InferencePipeline:
 
     def _analyze_video_sync(self, video_path: str) -> Dict[str, Any]:
         """Synchronous video analysis."""
+        self._require_trained_model()
         start = time.time()
 
         # 1. Validate video
@@ -343,17 +394,22 @@ class InferencePipeline:
                 "frames_processed": len(frames),
                 "frames_with_faces": len(fake_probabilities),
                 "aggregation_method": "mean_fake_probability",
+                "detector_name": self.detector_name,
+                "detector_notice": self.detector_notice,
             },
             "frames": frame_results,
             "suspicious_timestamps": suspicious,
             "video_info": video_info,
             "processing_time_ms": elapsed_ms,
-            "model_trained": self._model_loaded,
+            "model_trained": self.is_model_trained,
         }
 
     @torch.no_grad()
     def _run_inference(self, face_bgr: np.ndarray) -> Dict[str, Any]:
         """Run model inference on a single preprocessed face image."""
+        if not self._model_loaded:
+            return self._get_pretrained_detector().predict(face_bgr)
+
         # Preprocess
         tensor = prepare_face_for_model(face_bgr, self.image_size)
         batch = tensor.unsqueeze(0).to(self.device)
@@ -391,16 +447,18 @@ class InferencePipeline:
     ) -> Optional[str]:
         """Generate attention heatmap using explainability module."""
         try:
-            from ml.explainability.relevancy import compute_relevancy_map
+            from ml.explainability.relevancy import compute_gradient_weighted_relevancy
             from ml.explainability.heatmap import generate_heatmap_overlay
 
-            # Get attention maps from classifier
-            attn_maps = self.model.classifier.get_attention_maps()
-            if not attn_maps:
-                return None
-
-            # Compute relevancy
-            relevancy = compute_relevancy_map(attn_maps, self.model.classifier.num_blocks)
+            face_tensor = prepare_face_for_model(
+                face_bgr, self.image_size
+            ).unsqueeze(0).to(self.device)
+            relevancy = compute_gradient_weighted_relevancy(
+                self.model,
+                face_tensor,
+                target_class=int(inference_result["prediction"]),
+                grid_size=self.image_size // self.patch_size,
+            )
 
             # Generate overlay
             output_dir = Path("./uploads/heatmaps")
@@ -412,7 +470,7 @@ class InferencePipeline:
 
             generate_heatmap_overlay(
                 face_bgr, relevancy, str(path),
-                grid_size=self.image_size // 20,
+                grid_size=self.image_size // self.patch_size,
             )
             return str(path)
 
@@ -456,11 +514,28 @@ class InferencePipeline:
 
 # Singleton (lazy-loaded)
 _pipeline: Optional[InferencePipeline] = None
+_pipeline_key: Optional[tuple[str, Optional[str], Optional[int], Optional[int]]] = None
+_pipeline_lock = threading.Lock()
 
 
-def get_pipeline() -> InferencePipeline:
-    """Get or create the singleton inference pipeline."""
-    global _pipeline
-    if _pipeline is None:
-        _pipeline = InferencePipeline()
-    return _pipeline
+def get_pipeline(checkpoint_dir: str = "./checkpoints") -> InferencePipeline:
+    """Return a cached pipeline, refreshing it when the newest checkpoint changes."""
+    global _pipeline, _pipeline_key
+
+    directory = Path(checkpoint_dir)
+    checkpoint = _resolve_classifier_checkpoint(directory)
+    key = (
+        str(directory.resolve()),
+        str(checkpoint.resolve()) if checkpoint else None,
+        checkpoint.stat().st_mtime_ns if checkpoint else None,
+        checkpoint.stat().st_size if checkpoint else None,
+    )
+
+    with _pipeline_lock:
+        if _pipeline is None or _pipeline_key != key:
+            _pipeline = InferencePipeline(
+                checkpoint_path=str(checkpoint) if checkpoint else None,
+                checkpoint_dir=str(directory),
+            )
+            _pipeline_key = key
+        return _pipeline

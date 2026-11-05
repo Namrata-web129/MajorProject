@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { evaluationService, modelService, getErrorMessage } from '@/services/api';
 import type { EvaluationResult, ModelStatus } from '@/types';
-import { BarChart3, Play, Loader2, AlertTriangle, Lock } from 'lucide-react';
+import { BarChart3, Play, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -166,7 +166,7 @@ export default function EvaluationPage() {
                   <Radar name="Score" dataKey="value" stroke="#7c3aed" fill="#7c3aed" fillOpacity={0.25} />
                   <Tooltip
                     contentStyle={{ background: '#0a1628', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 8 }}
-                    formatter={(v: number) => [`${v}%`, '']}
+                    formatter={(value) => [`${Number(value)}%`, '']}
                   />
                 </RadarChart>
               </ResponsiveContainer>

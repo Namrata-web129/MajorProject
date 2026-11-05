@@ -52,9 +52,9 @@ async def run_image_detection(analysis_id: str, image_path: str) -> None:
     async with AsyncSessionLocal() as db:
         try:
             # ── Import ML pipeline (lazy import to avoid startup delay) ─────
-            from ml.inference.pipeline import InferencePipeline
+            from ml.inference.pipeline import get_pipeline
 
-            pipeline = InferencePipeline()
+            pipeline = get_pipeline(settings.CHECKPOINTS_DIR)
             result = await pipeline.analyze_image(image_path)
 
             elapsed_ms = int((time.time() - start_time) * 1000)
@@ -67,6 +67,8 @@ async def run_image_detection(analysis_id: str, image_path: str) -> None:
                 fake_probability=result["fake_probability"],
                 confidence=result["confidence"],
                 raw_logits=json.dumps(result.get("raw_logits", [])),
+                detector_name=result.get("detector_name"),
+                detector_notice=result.get("detector_notice"),
                 face_count=result.get("face_count", 1),
                 face_crops_paths=json.dumps(result.get("face_crops_paths", [])),
                 heatmap_path=result.get("heatmap_path"),
@@ -113,9 +115,9 @@ async def run_video_detection(analysis_id: str, video_path: str) -> None:
 
     async with AsyncSessionLocal() as db:
         try:
-            from ml.inference.pipeline import InferencePipeline
+            from ml.inference.pipeline import get_pipeline
 
-            pipeline = InferencePipeline()
+            pipeline = get_pipeline(settings.CHECKPOINTS_DIR)
             video_result = await pipeline.analyze_video(video_path)
 
             elapsed_ms = int((time.time() - start_time) * 1000)
@@ -128,6 +130,8 @@ async def run_video_detection(analysis_id: str, video_path: str) -> None:
                 real_probability=agg["real_probability"],
                 fake_probability=agg["fake_probability"],
                 confidence=agg["confidence"],
+                detector_name=agg.get("detector_name"),
+                detector_notice=agg.get("detector_notice"),
                 face_count=agg.get("face_count", 0),
             )
             db.add(det)

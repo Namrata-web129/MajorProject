@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { detectionService, getErrorMessage } from '@/services/api';
 import {
   Upload, Image, Video, X, Loader2, AlertCircle,
-  FileImage, FileVideo, Info, CheckCircle
+  FileVideo, Info
 } from 'lucide-react';
 
 const ACCEPTED_IMAGES = ['.jpg', '.jpeg', '.png'];
@@ -86,6 +86,22 @@ export default function DetectPage() {
       <div>
         <h1 className="section-title">Deepfake Detection</h1>
         <p className="section-subtitle">Upload an image or video to analyze with the Graph Transformer pipeline</p>
+      </div>
+
+      <div className="glass-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">Just exploring the interface?</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Open a synthetic demo preview. It does not analyze media or show a prediction.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/demo')}
+          className="btn-secondary text-sm justify-center"
+        >
+          View Demo Preview
+        </button>
       </div>
 
       {/* Upload Zone */}

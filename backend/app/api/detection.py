@@ -18,6 +18,7 @@ from app.core.dependencies import CurrentUser, DBSession
 from app.database.models import AnalysisHistory, DetectionResult, UploadedFile
 from app.schemas.schemas import (
     AnalysisSummary,
+    DetectionResultSchema,
     FullAnalysisResponse,
     PaginatedHistory,
 )
@@ -166,6 +167,7 @@ async def get_analysis(
             selectinload(AnalysisHistory.detection_result),
             selectinload(AnalysisHistory.video_frame_results),
             selectinload(AnalysisHistory.file),
+            selectinload(AnalysisHistory.model_version),
         )
         .where(AnalysisHistory.id == analysis_id, AnalysisHistory.user_id == current_user.id)
     )
@@ -188,6 +190,7 @@ async def get_analysis(
         analysis=AnalysisSummary(
             id=analysis.id,
             status=analysis.status,
+            error_message=analysis.error_message,
             prediction=det.prediction if det else None,
             real_probability=det.real_probability if det else None,
             fake_probability=det.fake_probability if det else None,
@@ -198,7 +201,19 @@ async def get_analysis(
             created_at=analysis.created_at,
             processing_duration_ms=analysis.processing_duration_ms,
         ),
-        detection=None if not det else None,  # serialized separately below
+        detection=None if not det else DetectionResultSchema(
+            prediction=det.prediction,
+            real_probability=det.real_probability,
+            fake_probability=det.fake_probability,
+            confidence=det.confidence,
+            raw_logits=json.loads(det.raw_logits) if det.raw_logits else None,
+            detector_name=det.detector_name,
+            detector_notice=det.detector_notice,
+            face_count=det.face_count,
+            heatmap_available=bool(det.heatmap_path and Path(det.heatmap_path).is_file()),
+            graph_data_available=bool(det.graph_data_path and Path(det.graph_data_path).is_file()),
+            patch_relevance=json.loads(det.patch_relevance) if det.patch_relevance else None,
+        ),
         video_frames=None if not frames else [
             {
                 "frame_index": f.frame_index,
@@ -211,6 +226,7 @@ async def get_analysis(
             for f in frames
         ],
         suspicious_timestamps=suspicious,
+        model_version=analysis.model_version.name if analysis.model_version else None,
     )
 
 
@@ -253,6 +269,7 @@ async def get_history(
         items.append(AnalysisSummary(
             id=a.id,
             status=a.status,
+            error_message=a.error_message,
             prediction=det.prediction if det else None,
             real_probability=det.real_probability if det else None,
             fake_probability=det.fake_probability if det else None,
@@ -274,7 +291,11 @@ async def get_history(
 
 
 # ── Delete Analysis ────────────────────────────────────────────────────────────
-@router.delete("/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{analysis_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def delete_analysis(
     analysis_id: str,
     current_user: CurrentUser,

@@ -9,6 +9,7 @@ import LoginPage from '@/pages/LoginPage';
 import RegisterPage from '@/pages/RegisterPage';
 import DashboardPage from '@/pages/DashboardPage';
 import DetectPage from '@/pages/DetectPage';
+import DemoPage from '@/pages/DemoPage';
 import ResultsPage from '@/pages/ResultsPage';
 import ExplainabilityPage from '@/pages/ExplainabilityPage';
 import HistoryPage from '@/pages/HistoryPage';
@@ -47,6 +48,7 @@ function App() {
             >
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="detect" element={<DetectPage />} />
+              <Route path="demo" element={<DemoPage />} />
               <Route path="results/:id" element={<ResultsPage />} />
               <Route path="explainability/:id" element={<ExplainabilityPage />} />
               <Route path="history" element={<HistoryPage />} />

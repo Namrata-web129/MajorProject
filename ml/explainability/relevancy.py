@@ -113,73 +113,55 @@ def compute_gradient_weighted_relevancy(
         relevance: (N,) numpy array of per-node relevance scores
     """
     model.eval()
+    if input_tensor.shape[0] != 1:
+        raise ValueError("Gradient-weighted relevancy expects a single input image.")
 
-    # Enable gradient computation
-    input_tensor = input_tensor.requires_grad_(False)
+    classifier = model.classifier
+    classifier.set_attention_gradient_capture(True)
+    model.zero_grad(set_to_none=True)
+    try:
+        output = model(input_tensor)
+        if target_class is None:
+            target_class = int(output["prediction"][0].item())
+        if target_class < 0 or target_class >= output["logits"].shape[1]:
+            raise ValueError(f"Invalid target class: {target_class}")
 
-    # Forward pass
-    output = model(input_tensor)
+        output["logits"][0, target_class].backward()
 
-    if target_class is None:
-        target_class = output["prediction"][0].item()
+        result = None
+        for block in classifier.blocks:
+            attn = block.attn_weights
+            if attn is None or attn.grad is None:
+                raise RuntimeError(
+                    "Attention gradients were not captured for every Transformer block."
+                )
 
-    # Get logits for target class
-    logit = output["logits"][0, target_class]
-
-    # Backward pass
-    model.zero_grad()
-    logit.backward(retain_graph=True)
-
-    # Get attention maps from the Graph Transformer classifier
-    attn_maps = model.classifier.get_attention_maps()
-
-    if not attn_maps:
-        return np.zeros(grid_size * grid_size)
-
-    # Gradient-weighted attention rollout
-    result = None
-    num_nodes = grid_size * grid_size + 1  # +1 for CLS
-
-    for block_idx, block in enumerate(model.classifier.blocks):
-        attn = block.attn_weights  # (B, H, L, L) — stored during forward
-
-        if attn is None:
-            continue
-
-        # Get gradients for Q, K projections
-        # We weight attention by gradient magnitudes
-        attn_avg = attn[0].mean(dim=0)  # (L, L)
-
-        # Gradient-weighted attention
-        # Use gradient of attention w.r.t. class logit
-        if attn.grad is not None:
-            grad_weight = attn.grad[0].mean(dim=0).abs()
+            attn_avg = attn.detach()[0].mean(dim=0)
+            grad_weight = attn.grad.detach()[0].mean(dim=0).abs()
             attn_weighted = attn_avg * grad_weight
-        else:
-            attn_weighted = attn_avg
+            attn_with_id = attn_weighted + torch.eye(
+                attn_weighted.size(0), device=attn_weighted.device
+            )
+            attn_norm = attn_with_id / attn_with_id.sum(
+                dim=-1, keepdim=True
+            ).clamp_min(1e-8)
 
-        # Add identity
-        I = torch.eye(attn_weighted.size(0), device=attn_weighted.device)
-        attn_with_id = attn_weighted + I
-
-        # Row-normalise
-        attn_norm = attn_with_id / attn_with_id.sum(dim=-1, keepdim=True).clamp(min=1e-8)
+            result = attn_norm if result is None else torch.matmul(result, attn_norm)
 
         if result is None:
-            result = attn_norm
+            raise RuntimeError("The classifier did not produce attention maps.")
+
+        cls_relevance = result[0, 1:]
+        rel_min = cls_relevance.min()
+        rel_max = cls_relevance.max()
+        if rel_max > rel_min:
+            cls_relevance = (cls_relevance - rel_min) / (rel_max - rel_min)
         else:
-            result = torch.matmul(result, attn_norm)
+            cls_relevance = torch.zeros_like(cls_relevance)
 
-    if result is None:
-        return np.zeros(grid_size * grid_size)
-
-    # CLS row → node relevance
-    cls_relevance = result[0, 1:].detach()
-
-    # Normalise
-    rel_min = cls_relevance.min()
-    rel_max = cls_relevance.max()
-    if rel_max > rel_min:
-        cls_relevance = (cls_relevance - rel_min) / (rel_max - rel_min)
-
-    return cls_relevance.cpu().numpy()
+        return cls_relevance.detach().cpu().numpy()
+    finally:
+        classifier.set_attention_gradient_capture(False)
+        for block in classifier.blocks:
+            block.attn_weights = None
+        model.zero_grad(set_to_none=True)

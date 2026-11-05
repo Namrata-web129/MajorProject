@@ -4,6 +4,7 @@ SQLAlchemy Database Engine + Session (async)
 """
 from __future__ import annotations
 
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -47,8 +48,22 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db() -> None:
-    """Create all tables on startup."""
+    """Create tables and add compatible columns to existing databases."""
     # Import models so they are registered with Base metadata
     from app.database import models  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        columns = await conn.run_sync(
+            lambda sync_conn: {
+                column["name"]
+                for column in inspect(sync_conn).get_columns("detection_results")
+            }
+        )
+        if "detector_name" not in columns:
+            await conn.execute(
+                text("ALTER TABLE detection_results ADD COLUMN detector_name VARCHAR(255)")
+            )
+        if "detector_notice" not in columns:
+            await conn.execute(
+                text("ALTER TABLE detection_results ADD COLUMN detector_notice TEXT")
+            )

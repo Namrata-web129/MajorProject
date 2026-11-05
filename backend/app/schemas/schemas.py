@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 class AnalysisSummary(BaseModel):
     id: str
     status: str
+    error_message: Optional[str] = None
     prediction: Optional[str] = None
     real_probability: Optional[float] = None
     fake_probability: Optional[float] = None
@@ -44,6 +45,8 @@ class DetectionResultSchema(BaseModel):
     fake_probability: float
     confidence: float
     raw_logits: Optional[List[float]] = None
+    detector_name: Optional[str] = None
+    detector_notice: Optional[str] = None
     face_count: int
     heatmap_available: bool = False
     graph_data_available: bool = False
@@ -94,6 +97,7 @@ class ModelInfoResponse(BaseModel):
 
 class ModelStatusResponse(BaseModel):
     model_loaded: bool
+    pretrained_fallback_available: bool
     training_status: str
     device: str
     checkpoint_exists: bool

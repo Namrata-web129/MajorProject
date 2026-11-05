@@ -17,6 +17,7 @@ aiosqlite==0.20.0
 # ─── Pydantic ─────────────────────────────────────────────────────────────────
 pydantic==2.10.2
 pydantic-settings==2.6.1
+email-validator==2.2.0
 
 # ─── ML Core ──────────────────────────────────────────────────────────────────
 torch==2.4.1
@@ -27,10 +28,12 @@ scipy==1.14.1
 scikit-learn==1.5.2
 
 # ─── Computer Vision ──────────────────────────────────────────────────────────
-opencv-python==4.10.0.84
-Pillow==11.0.0
+opencv-python-headless==4.10.0.84
+transformers==4.49.0
+Pillow==10.2.0
 albumentations==1.4.21
-facenet-pytorch==2.6.0       # MTCNN face detection
+# facenet-pytorch is intentionally not pinned here: it requires torch<2.3,
+# conflicting with the project's torch==2.4.1 pin. Haar cascades are the default.
 
 # ─── Graph Neural Networks ───────────────────────────────────────────────────
 # torch-geometric and its dependencies – install separately with correct CUDA index

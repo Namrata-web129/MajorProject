@@ -58,6 +58,7 @@ async def get_model_status(current_user: CurrentUser, db: DBSession) -> ModelSta
 
     return ModelStatusResponse(
         model_loaded=checkpoint_exists,
+        pretrained_fallback_available=True,
         training_status=model.training_status if model else "untrained",
         device=device,
         checkpoint_exists=checkpoint_exists,

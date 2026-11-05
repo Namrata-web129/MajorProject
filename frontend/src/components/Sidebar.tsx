@@ -1,14 +1,14 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard, Search, Activity, Brain, Cpu,
-  Database, BarChart3, History, LogOut, Shield,
-  ChevronRight, Zap
+  BarChart3, History, LogOut, Shield
 } from 'lucide-react';
 
 interface NavItem {
   to: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: LucideIcon;
   label: string;
   adminOnly?: boolean;
 }

@@ -34,6 +34,7 @@ export type Prediction = 'REAL' | 'FAKE';
 export interface AnalysisSummary {
   id: string;
   status: AnalysisStatus;
+  error_message?: string | null;
   prediction?: Prediction;
   real_probability?: number;
   fake_probability?: number;
@@ -60,6 +61,8 @@ export interface DetectionResult {
   fake_probability: number;
   confidence: number;
   raw_logits?: number[];
+  detector_name?: string | null;
+  detector_notice?: string | null;
   face_count: number;
   heatmap_available: boolean;
   graph_data_available: boolean;
@@ -104,6 +107,7 @@ export interface ModelInfo {
 
 export interface ModelStatus {
   model_loaded: boolean;
+  pretrained_fallback_available: boolean;
   training_status: string;
   device: string;
   checkpoint_exists: boolean;
@@ -187,7 +191,7 @@ export interface ExplainabilityData {
   patch_relevance?: number[];
   graph_nodes?: number;
   graph_edges?: number;
-  attention_weights?: number[][];
+  attention_weights?: number[][][];
   explanation_text: string;
 }
 

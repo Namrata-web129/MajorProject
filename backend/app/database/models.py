@@ -102,6 +102,8 @@ class DetectionResult(Base):
     fake_probability: Mapped[float] = mapped_column(Float, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     raw_logits: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # JSON string
+    detector_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    detector_notice: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     face_count: Mapped[int] = mapped_column(Integer, default=1)
     face_crops_paths: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # JSON list of paths
     heatmap_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)

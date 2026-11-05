@@ -71,6 +71,7 @@ class GraphTransformerBlock(nn.Module):
 
         # Store attention weights for explainability
         self.attn_weights: Optional[torch.Tensor] = None
+        self.capture_attention_gradients = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -98,7 +99,11 @@ class GraphTransformerBlock(nn.Module):
         scale = self.head_dim ** 0.5
         attn = torch.matmul(Q, K.transpose(-2, -1)) / scale  # (B, H, L, L)
         attn = F.softmax(attn, dim=-1)
-        self.attn_weights = attn.detach()  # Store for explainability
+        if self.capture_attention_gradients and torch.is_grad_enabled():
+            attn.retain_grad()
+            self.attn_weights = attn
+        else:
+            self.attn_weights = attn.detach()
         attn = self.attn_dropout(attn)
 
         # Apply attention to values
@@ -255,3 +260,8 @@ class GraphTransformerClassifier(nn.Module):
             if block.attn_weights is not None:
                 maps.append(block.attn_weights)
         return maps
+
+    def set_attention_gradient_capture(self, enabled: bool) -> None:
+        """Enable gradient retention for an explainability forward pass."""
+        for block in self.blocks:
+            block.capture_attention_gradients = enabled

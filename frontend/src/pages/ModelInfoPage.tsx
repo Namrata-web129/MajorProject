@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { modelService } from '@/services/api';
 import type { ModelInfo, ModelStatus } from '@/types';
-import { Cpu, CheckCircle, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { Cpu, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 
 function InfoRow({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
@@ -42,7 +42,7 @@ export default function ModelInfoPage() {
         <h1 className="section-title flex items-center gap-3">
           <Cpu size={24} className="text-violet-400" /> Model Information
         </h1>
-        <p className="section-subtitle">Architecture details and training status</p>
+        <p className="section-subtitle">Architecture details and active detection model</p>
       </div>
 
       {/* Status Card */}
@@ -53,11 +53,11 @@ export default function ModelInfoPage() {
             <div className="p-3 rounded-xl" style={{ background: 'rgba(124,58,237,0.08)' }}>
               <p className="text-xs text-slate-500 mb-1">Inference Ready</p>
               <div className="flex items-center gap-2">
-                {status.model_loaded
+                {status.model_loaded || status.pretrained_fallback_available
                   ? <CheckCircle size={16} className="text-emerald-400" />
                   : <XCircle size={16} className="text-red-400" />}
-                <span className={`text-sm font-bold ${status.model_loaded ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {status.model_loaded ? 'Ready' : 'Not Ready'}
+                <span className={`text-sm font-bold ${status.model_loaded || status.pretrained_fallback_available ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {status.model_loaded ? 'Graph Transformer ready' : status.pretrained_fallback_available ? 'Pretrained ViT ready' : 'Not ready'}
                 </span>
               </div>
             </div>
@@ -66,21 +66,12 @@ export default function ModelInfoPage() {
               <p className="text-sm font-bold text-white uppercase">{status.device}</p>
             </div>
             <div className="p-3 rounded-xl" style={{ background: 'rgba(124,58,237,0.08)' }}>
-              <p className="text-xs text-slate-500 mb-1">Training Status</p>
-              <p className="text-sm font-bold text-white capitalize">{status.training_status}</p>
-            </div>
-          </div>
-
-          {!status.model_loaded && (
-            <div className="mt-4 flex items-start gap-3 p-3 rounded-xl text-xs"
-                 style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#fcd34d' }}>
-              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-              <p>
-                No trained model checkpoint is available. The system cannot run inference until the model
-                is trained. Refer to the Training section to begin pretraining and classifier training.
+              <p className="text-xs text-slate-500 mb-1">Active Detector</p>
+              <p className="text-sm font-bold text-white">
+                {status.model_loaded ? 'Graph Transformer' : 'Pretrained ViT'}
               </p>
             </div>
-          )}
+          </div>
         </div>
       )}
 

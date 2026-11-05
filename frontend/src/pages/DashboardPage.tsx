@@ -3,13 +3,14 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { detectionService, modelService } from '@/services/api';
 import type { AnalysisSummary, ModelStatus } from '@/types';
+import type { LucideIcon } from 'lucide-react';
 import {
   Search, Activity, CheckCircle, XCircle, Clock,
-  TrendingUp, Upload, ChevronRight, Cpu, AlertTriangle
+  Upload, ChevronRight, Cpu
 } from 'lucide-react';
 
 function StatCard({ icon: Icon, label, value, color, trend }: {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: LucideIcon;
   label: string;
   value: string | number;
   color: string;
@@ -40,7 +41,7 @@ function PredictionBadge({ prediction }: { prediction?: string }) {
 }
 
 export default function DashboardPage() {
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
   const [history, setHistory] = useState<AnalysisSummary[]>([]);
   const [modelStatus, setModelStatus] = useState<ModelStatus | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -80,26 +81,6 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Model Status Banner */}
-      {modelStatus && !modelStatus.model_loaded && (
-        <div className="glass-card p-4 flex items-center gap-3"
-             style={{ border: '1px solid rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.05)' }}>
-          <AlertTriangle size={18} className="text-amber-400 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-amber-300">Model Not Trained</p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              No trained model checkpoint is available. Inference will fail until the model is trained.
-              {isAdmin && ' Go to Training to start the training pipeline.'}
-            </p>
-          </div>
-          {isAdmin && (
-            <Link to="/training" className="btn-secondary text-xs py-2 px-3">
-              Train Model <ChevronRight size={14} />
-            </Link>
-          )}
-        </div>
-      )}
-
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={Search} label="Total Analyses" value={total} color="#7c3aed" />
@@ -108,20 +89,20 @@ export default function DashboardPage() {
         <StatCard icon={Clock} label="Processing" value={processing} color="#f59e0b" />
       </div>
 
-      {/* Model Status Card */}
+      {/* Detection Status */}
       {modelStatus && (
         <div className="glass-card p-5">
           <div className="flex items-center gap-3 mb-4">
             <Cpu size={18} className="text-violet-400" />
-            <h2 className="font-semibold text-white">Model Status</h2>
+            <h2 className="font-semibold text-white">Detection Status</h2>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
-              <p className="text-xs text-slate-500 mb-1">Status</p>
+              <p className="text-xs text-slate-500 mb-1">Detector</p>
               <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${modelStatus.model_loaded ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                <span className="text-sm font-medium text-white capitalize">
-                  {modelStatus.training_status}
+                <div className={`w-2 h-2 rounded-full ${modelStatus.model_loaded || modelStatus.pretrained_fallback_available ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                <span className="text-sm font-medium text-white">
+                  {modelStatus.model_loaded ? 'Graph Transformer' : 'Pretrained ViT'}
                 </span>
               </div>
             </div>
@@ -129,18 +110,9 @@ export default function DashboardPage() {
               <p className="text-xs text-slate-500 mb-1">Device</p>
               <p className="text-sm font-medium text-white uppercase">{modelStatus.device}</p>
             </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Checkpoint</p>
-              <span className={`text-sm font-medium ${modelStatus.checkpoint_exists ? 'text-emerald-400' : 'text-red-400'}`}>
-                {modelStatus.checkpoint_exists ? 'Available' : 'Missing'}
-              </span>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Pretrain</p>
-              <span className={`text-sm font-medium ${modelStatus.pretrain_checkpoint_exists ? 'text-emerald-400' : 'text-slate-500'}`}>
-                {modelStatus.pretrain_checkpoint_exists ? 'Available' : 'Not done'}
-              </span>
-            </div>
+            <p className="text-sm text-slate-400 self-center">
+              Ready for image and sampled video-frame analysis
+            </p>
           </div>
         </div>
       )}

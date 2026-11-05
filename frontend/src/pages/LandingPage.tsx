@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import {
   Shield, Brain, Network, Zap, Eye, Lock,
-  ArrowRight, ChevronRight, Github, ExternalLink
+  ArrowRight, ChevronRight
 } from 'lucide-react';
 
 const features = [

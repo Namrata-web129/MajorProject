@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { detectionService, getErrorMessage } from '@/services/api';
+import { detectionService } from '@/services/api';
 import type { AnalysisSummary } from '@/types';
-import { History, CheckCircle, XCircle, Clock, Trash2, Eye, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { History, CheckCircle, XCircle, Trash2, Eye, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 function StatusBadge({ status, prediction }: { status: string; prediction?: string }) {
   if (status === 'completed' && prediction === 'REAL') return <span className="badge-real"><CheckCircle size={11} /> Real</span>;

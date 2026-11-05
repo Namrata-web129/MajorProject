@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { detectionService, explainabilityService, getErrorMessage } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import type { FullAnalysisResponse, ExplainabilityData } from '@/types';
 import {
   CheckCircle, XCircle, Clock, AlertTriangle, Brain,
-  ChevronLeft, Download, RefreshCw, Loader2, Eye
+  ChevronLeft, Loader2, Eye
 } from 'lucide-react';
 
 function ConfidenceBar({ label, value, isReal }: { label: string; value: number; isReal: boolean }) {
@@ -32,11 +33,12 @@ function ConfidenceBar({ label, value, isReal }: { label: string; value: number;
 
 export default function ResultsPage() {
   const { id } = useParams<{ id: string }>();
+  const { isAdmin } = useAuth();
   const [result, setResult] = useState<FullAnalysisResponse | null>(null);
   const [xai, setXai] = useState<ExplainabilityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchResult = async () => {
     if (!id) return;
@@ -111,7 +113,7 @@ export default function ResultsPage() {
           <div>
             <h1 className="text-xl font-bold text-white">Processing...</h1>
             <p className="text-slate-400 text-sm mt-1">
-              Running face detection, ViT encoding, graph construction, and classification.
+              Running media analysis. The first run may take longer if pretrained weights need downloading.
               This page updates automatically.
             </p>
           </div>
@@ -128,8 +130,19 @@ export default function ResultsPage() {
           <div className="mt-4 p-3 rounded-lg text-xs text-slate-400"
                style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
             <AlertTriangle size={12} className="inline mr-1.5 text-amber-400" />
-            If the error mentions "Model not loaded" or "not trained", the system requires a trained model
-            checkpoint before inference can proceed. Contact your administrator to train the model.
+            No prediction was generated. Check the error above. The first analysis needs an internet connection
+            to download the pretrained detector; later runs use the cached model.
+          </div>
+          <div className="mt-4">
+            {isAdmin ? (
+              <Link to="/training" className="btn-primary text-sm">
+                Open Model Training
+              </Link>
+            ) : (
+              <Link to="/login" className="btn-secondary text-sm">
+                Sign in as administrator
+              </Link>
+            )}
           </div>
         </div>
       ) : detection ? (
@@ -147,7 +160,7 @@ export default function ResultsPage() {
                   {detection.prediction}
                 </h1>
                 <p className="text-sm text-slate-400 mt-1">
-                  {(detection.confidence * 100).toFixed(1)}% confidence · {detection.face_count} face{detection.face_count !== 1 ? 's' : ''} analyzed
+                  {(detection.confidence * 100).toFixed(1)}% uncalibrated model score · {detection.face_count} face{detection.face_count !== 1 ? 's' : ''} analyzed
                 </p>
               </div>
             </div>
@@ -158,6 +171,12 @@ export default function ResultsPage() {
                 <p className="text-xs text-slate-600">{(analysis.processing_duration_ms / 1000).toFixed(1)}s</p>
               )}
             </div>
+          </div>
+
+          <div className="mt-5 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
+            <AlertTriangle size={13} className="mr-1.5 inline" />
+            Detector: {detection.detector_name || 'Project Graph Transformer'}.{' '}
+            {detection.detector_notice || 'This experimental prediction is not proof of authenticity. Video results summarize sampled face frames.'}
           </div>
 
           <div className="mt-6 space-y-3">
